@@ -10,7 +10,6 @@ import {
   NavbarBrand,
   NavbarContent,
   NavbarItem,
-  Button,
   Dropdown,
   DropdownTrigger,
   DropdownMenu,
@@ -26,7 +25,6 @@ import {
   ArrowLeftRight,
   TrendingUp,
   LogOut,
-  User as UserIcon,
   Moon,
   Sun,
 } from 'lucide-react';

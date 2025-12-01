@@ -4,7 +4,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { Card, CardBody, CardHeader, Spinner, Chip } from '@nextui-org/react';
+import { Card, CardBody, CardHeader, Spinner } from '@nextui-org/react';
 import {
   Wallet,
   TrendingUp,
