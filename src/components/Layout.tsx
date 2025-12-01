@@ -4,7 +4,7 @@
  */
 
 import { ReactNode } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link as RouterLink } from 'react-router-dom';
 import {
   Navbar,
   NavbarBrand,
@@ -15,7 +15,6 @@ import {
   DropdownMenu,
   DropdownItem,
   Avatar,
-  Link,
   Switch,
 } from '@nextui-org/react';
 import {
@@ -69,14 +68,15 @@ export function Layout({ children }: LayoutProps) {
 
             return (
               <NavbarItem key={item.path} isActive={isActive}>
-                <Link
-                  color={isActive ? 'primary' : 'foreground'}
-                  href={item.path}
-                  className="flex items-center gap-2"
+                <RouterLink
+                  to={item.path}
+                  className={`flex items-center gap-2 ${
+                    isActive ? 'text-primary' : 'text-foreground'
+                  }`}
                 >
                   <Icon size={18} />
                   {item.label}
-                </Link>
+                </RouterLink>
               </NavbarItem>
             );
           })}
