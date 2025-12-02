@@ -99,6 +99,12 @@ export interface Transaction {
   paymentDate?: string;
   isPaid: boolean;
   isRecurring: boolean;
+  recurringType?: 'WEEKLY' | 'MONTHLY' | 'YEARLY' | 'INDEFINITE';
+  recurringGroupId?: string;
+  isInstallment: boolean;
+  installments?: number;
+  currentInstallment?: number;
+  installmentGroupId?: string;
   notes?: string;
   createdAt: string;
   updatedAt: string;
@@ -125,6 +131,9 @@ export interface CreateTransactionData {
   paymentDate?: string;
   isPaid?: boolean;
   isRecurring?: boolean;
+  recurringType?: 'WEEKLY' | 'MONTHLY' | 'YEARLY' | 'INDEFINITE';
+  isInstallment?: boolean;
+  installments?: number;
   notes?: string;
   walletId: string;
   categoryId: string;
@@ -137,9 +146,14 @@ export interface UpdateTransactionData {
   paymentDate?: string | null;
   isPaid?: boolean;
   isRecurring?: boolean;
+  recurringType?: 'WEEKLY' | 'MONTHLY' | 'YEARLY' | 'INDEFINITE' | null;
+  isInstallment?: boolean;
+  installments?: number | null;
+  currentInstallment?: number | null;
   notes?: string | null;
   walletId?: string;
   categoryId?: string;
+  updateAll?: boolean; // Flag para atualizar todos do grupo
 }
 
 // ==================== TRANSFERÊNCIA ====================

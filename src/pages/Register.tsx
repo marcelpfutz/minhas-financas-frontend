@@ -47,9 +47,20 @@ export default function Register() {
 
     try {
       await register({ name, email, password });
-      navigate('/');
+      navigate('/dashboard');
     } catch (err: any) {
-      setError(err.message || 'Erro ao criar conta');
+      const errorMessage = err.message || 'Erro ao criar conta';
+      
+      // Mensagens mais amigáveis baseadas no erro do backend
+      if (errorMessage.includes('Email já cadastrado')) {
+        setError('Este email já está em uso. Tente fazer login ou use outro email.');
+      } else if (errorMessage.includes('Email inválido')) {
+        setError('Email inválido. Verifique o formato do email.');
+      } else if (errorMessage.includes('Nome')) {
+        setError('Nome deve ter no mínimo 3 caracteres.');
+      } else {
+        setError(errorMessage);
+      }
     } finally {
       setLoading(false);
     }

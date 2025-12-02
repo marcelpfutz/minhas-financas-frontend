@@ -33,9 +33,18 @@ export default function Login() {
 
     try {
       await login({ email, password });
-      navigate('/');
+      navigate('/dashboard');
     } catch (err: any) {
-      setError(err.message || 'Erro ao fazer login');
+      const errorMessage = err.message || 'Erro ao fazer login';
+      
+      // Mensagens mais amigáveis baseadas no erro do backend
+      if (errorMessage.includes('Credenciais inválidas')) {
+        setError('Email ou senha incorretos. Verifique seus dados ou crie uma conta.');
+      } else if (errorMessage.includes('Email')) {
+        setError('Email inválido. Verifique o formato do email.');
+      } else {
+        setError(errorMessage);
+      }
     } finally {
       setLoading(false);
     }

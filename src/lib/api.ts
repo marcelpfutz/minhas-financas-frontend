@@ -32,10 +32,16 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     // Se receber 401 (não autorizado), remove token e redireciona para login
+    // EXCETO se for uma requisição de login/register (onde 401 é erro esperado)
     if (error.response?.status === 401) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      window.location.href = '/login';
+      const isAuthEndpoint = error.config?.url?.includes('/auth/login') || 
+                             error.config?.url?.includes('/auth/register');
+      
+      if (!isAuthEndpoint) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        window.location.href = '/minhas-financas/login';
+      }
     }
     return Promise.reject(error);
   }

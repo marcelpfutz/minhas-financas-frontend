@@ -35,6 +35,8 @@ export default function Transactions() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
+  const [deleteMode, setDeleteMode] = useState<'single' | 'all' | null>(null);
+  const [editMode, setEditMode] = useState<'single' | 'all' | null>(null);
   
   const [formData, setFormData] = useState<CreateTransactionData>({
     description: '',
@@ -43,13 +45,27 @@ export default function Transactions() {
     dueDate: new Date().toISOString().split('T')[0],
     isPaid: false,
     isRecurring: false,
+    recurringType: undefined,
+    isInstallment: false,
+    installments: undefined,
     notes: '',
     walletId: '',
     categoryId: '',
   });
 
   const { isOpen, onOpen, onClose } = useDisclosure();
+  const { 
+    isOpen: isDeleteOpen, 
+    onOpen: onDeleteOpen, 
+    onClose: onDeleteClose 
+  } = useDisclosure();
+  const { 
+    isOpen: isEditConfirmOpen, 
+    onOpen: onEditConfirmOpen, 
+    onClose: onEditConfirmClose 
+  } = useDisclosure();
   const [submitting, setSubmitting] = useState(false);
+  const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -81,6 +97,9 @@ export default function Transactions() {
       dueDate: new Date().toISOString().split('T')[0],
       isPaid: false,
       isRecurring: false,
+      recurringType: undefined,
+      isInstallment: false,
+      installments: undefined,
       notes: '',
       walletId: wallets[0]?.id || '',
       categoryId: '',
@@ -90,6 +109,13 @@ export default function Transactions() {
 
   const handleEdit = (transaction: Transaction) => {
     setSelectedTransaction(transaction);
+    
+    // Se for recorrente ou parcelado, pergunta se quer editar todos
+    if (transaction.recurringGroupId || transaction.installmentGroupId) {
+      setEditMode(null);
+      onEditConfirmOpen();
+    }
+    
     setFormData({
       description: transaction.description,
       amount: transaction.amount,
@@ -97,10 +123,18 @@ export default function Transactions() {
       dueDate: transaction.dueDate.split('T')[0],
       isPaid: transaction.isPaid,
       isRecurring: transaction.isRecurring,
+      recurringType: transaction.recurringType,
+      isInstallment: transaction.isInstallment,
+      installments: transaction.installments,
       notes: transaction.notes || '',
       walletId: transaction.wallet.id,
       categoryId: transaction.category.id,
     });
+  };
+
+  const confirmEdit = (mode: 'single' | 'all') => {
+    setEditMode(mode);
+    onEditConfirmClose();
     onOpen();
   };
 
@@ -108,12 +142,19 @@ export default function Transactions() {
     setSubmitting(true);
     try {
       if (selectedTransaction) {
-        await api.put(`/transactions/${selectedTransaction.id}`, formData);
+        // Atualização
+        const updateData: any = { ...formData };
+        if (editMode === 'all') {
+          updateData.updateAll = true;
+        }
+        await api.put(`/transactions/${selectedTransaction.id}`, updateData);
       } else {
+        // Criação
         await api.post('/transactions', formData);
       }
       await loadData();
       onClose();
+      setEditMode(null);
     } catch (error: any) {
       alert(error.response?.data?.error || 'Erro ao salvar lançamento');
     } finally {
@@ -121,12 +162,28 @@ export default function Transactions() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Tem certeza que deseja excluir este lançamento?')) return;
+  const handleDeleteClick = (transaction: Transaction) => {
+    setTransactionToDelete(transaction.id);
+    
+    // Se for recorrente ou parcelado, pergunta se quer deletar todos
+    if (transaction.recurringGroupId || transaction.installmentGroupId) {
+      onDeleteOpen();
+    } else {
+      // Deleta direto se for um lançamento único
+      confirmDelete('single');
+    }
+  };
+
+  const confirmDelete = async (mode: 'single' | 'all') => {
+    if (!transactionToDelete) return;
 
     try {
-      await api.delete(`/transactions/${id}`);
+      const params = mode === 'all' ? '?deleteAll=true' : '';
+      await api.delete(`/transactions/${transactionToDelete}${params}`);
       await loadData();
+      onDeleteClose();
+      setTransactionToDelete(null);
+      setDeleteMode(null);
     } catch (error: any) {
       alert(error.response?.data?.error || 'Erro ao deletar lançamento');
     }
@@ -200,8 +257,13 @@ export default function Transactions() {
                           </Chip>
                         )}
                         {transaction.isRecurring && (
-                          <Chip size="sm" variant="flat">
+                          <Chip size="sm" variant="flat" color="secondary">
                             Recorrente
+                          </Chip>
+                        )}
+                        {transaction.isInstallment && (
+                          <Chip size="sm" variant="flat" color="primary">
+                            {transaction.currentInstallment}/{transaction.installments}
                           </Chip>
                         )}
                       </div>
@@ -258,7 +320,7 @@ export default function Transactions() {
                         color="danger"
                         variant="flat"
                         isIconOnly
-                        onPress={() => handleDelete(transaction.id)}
+                        onPress={() => handleDeleteClick(transaction)}
                       >
                         <Trash2 size={16} />
                       </Button>
@@ -387,24 +449,96 @@ export default function Transactions() {
                   variant="bordered"
                 />
 
-                <div className="flex gap-4">
-                  <Checkbox
-                    isSelected={formData.isPaid}
-                    onValueChange={(value) =>
-                      setFormData({ ...formData, isPaid: value })
-                    }
-                  >
-                    Já foi pago
-                  </Checkbox>
+                <div className="space-y-4 border-t pt-4">
+                  <div className="flex gap-4">
+                    <Checkbox
+                      isSelected={formData.isPaid}
+                      onValueChange={(value) =>
+                        setFormData({ ...formData, isPaid: value })
+                      }
+                    >
+                      Já foi pago
+                    </Checkbox>
+                  </div>
 
-                  <Checkbox
-                    isSelected={formData.isRecurring}
-                    onValueChange={(value) =>
-                      setFormData({ ...formData, isRecurring: value })
-                    }
-                  >
-                    Recorrente
-                  </Checkbox>
+                  <div className="flex gap-4">
+                    <Checkbox
+                      isSelected={formData.isRecurring}
+                      onValueChange={(value) => {
+                        setFormData({ 
+                          ...formData, 
+                          isRecurring: value,
+                          isInstallment: value ? false : formData.isInstallment,
+                          recurringType: value ? 'MONTHLY' : undefined
+                        });
+                      }}
+                      isDisabled={formData.isInstallment}
+                    >
+                      Lançamento Recorrente
+                    </Checkbox>
+
+                    <Checkbox
+                      isSelected={formData.isInstallment}
+                      onValueChange={(value) => {
+                        setFormData({ 
+                          ...formData, 
+                          isInstallment: value,
+                          isRecurring: value ? false : formData.isRecurring,
+                          installments: value ? 2 : undefined
+                        });
+                      }}
+                      isDisabled={formData.isRecurring}
+                    >
+                      Lançamento Parcelado
+                    </Checkbox>
+                  </div>
+
+                  {formData.isRecurring && (
+                    <Select
+                      label="Tipo de Recorrência"
+                      selectedKeys={formData.recurringType ? [formData.recurringType] : []}
+                      onChange={(e) =>
+                        setFormData({ 
+                          ...formData, 
+                          recurringType: e.target.value as 'WEEKLY' | 'MONTHLY' | 'YEARLY' | 'INDEFINITE'
+                        })
+                      }
+                      variant="bordered"
+                      isRequired
+                    >
+                      <SelectItem key="WEEKLY" value="WEEKLY">
+                        Semanal
+                      </SelectItem>
+                      <SelectItem key="MONTHLY" value="MONTHLY">
+                        Mensal
+                      </SelectItem>
+                      <SelectItem key="YEARLY" value="YEARLY">
+                        Anual
+                      </SelectItem>
+                      <SelectItem key="INDEFINITE" value="INDEFINITE">
+                        Sem data definida (36 meses)
+                      </SelectItem>
+                    </Select>
+                  )}
+
+                  {formData.isInstallment && (
+                    <Input
+                      type="number"
+                      label="Número de Parcelas"
+                      placeholder="Ex: 12"
+                      value={formData.installments?.toString() || ''}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          installments: parseInt(e.target.value) || 2,
+                        })
+                      }
+                      min={2}
+                      isRequired
+                      variant="bordered"
+                      description="O valor será dividido igualmente entre as parcelas"
+                    />
+                  )}
                 </div>
               </div>
             </ModalBody>
@@ -418,6 +552,68 @@ export default function Transactions() {
                 isLoading={submitting}
               >
                 {selectedTransaction ? 'Salvar' : 'Criar'}
+              </Button>
+            </ModalFooter>
+          </ModalContent>
+        </Modal>
+
+        {/* Modal de Confirmação de Exclusão */}
+        <Modal isOpen={isDeleteOpen} onClose={onDeleteClose}>
+          <ModalContent>
+            <ModalHeader>Excluir Lançamento</ModalHeader>
+            <ModalBody>
+              <p>
+                Este lançamento faz parte de um grupo (recorrente ou parcelado).
+                Deseja excluir:
+              </p>
+            </ModalBody>
+            <ModalFooter>
+              <Button
+                variant="light"
+                onPress={() => {
+                  confirmDelete('single');
+                }}
+              >
+                Apenas este lançamento
+              </Button>
+              <Button
+                color="danger"
+                onPress={() => {
+                  confirmDelete('all');
+                }}
+              >
+                Todos do grupo
+              </Button>
+            </ModalFooter>
+          </ModalContent>
+        </Modal>
+
+        {/* Modal de Confirmação de Edição */}
+        <Modal isOpen={isEditConfirmOpen} onClose={onEditConfirmClose}>
+          <ModalContent>
+            <ModalHeader>Editar Lançamento</ModalHeader>
+            <ModalBody>
+              <p>
+                Este lançamento faz parte de um grupo (recorrente ou parcelado).
+                Deseja editar:
+              </p>
+            </ModalBody>
+            <ModalFooter>
+              <Button
+                variant="light"
+                onPress={() => {
+                  confirmEdit('single');
+                }}
+              >
+                Apenas este lançamento
+              </Button>
+              <Button
+                color="primary"
+                onPress={() => {
+                  confirmEdit('all');
+                }}
+              >
+                Todos do grupo
               </Button>
             </ModalFooter>
           </ModalContent>
