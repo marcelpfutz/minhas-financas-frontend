@@ -41,7 +41,7 @@ export function Layout({ children }: LayoutProps) {
   const location = useLocation();
 
   const menuItems = [
-    { path: '/', label: 'Dashboard', icon: LayoutDashboard },
+    { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/wallets', label: 'Carteiras', icon: Wallet },
     { path: '/categories', label: 'Categorias', icon: Tag },
     { path: '/transactions', label: 'Lançamentos', icon: TrendingUp },
