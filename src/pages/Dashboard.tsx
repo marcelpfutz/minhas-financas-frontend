@@ -4,36 +4,125 @@
  */
 
 import { useEffect, useState } from 'react';
-import { Card, CardBody, CardHeader, Spinner } from '@nextui-org/react';
+import { 
+  Card, 
+  CardBody, 
+  CardHeader, 
+  Spinner, 
+  Select, 
+  SelectItem 
+} from '@nextui-org/react';
 import {
   Wallet,
   TrendingUp,
   TrendingDown,
   Calendar,
   AlertCircle,
+  Filter,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import api from '../lib/api';
 import { DashboardSummary, Transaction } from '../types';
-import { format } from 'date-fns';
+import { 
+  format, 
+  startOfWeek, 
+  endOfWeek, 
+  startOfMonth, 
+  endOfMonth
+} from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+
+type PeriodType = 'week' | 'biweekly' | 'month';
 
 export default function Dashboard() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [upcoming, setUpcoming] = useState<Transaction[]>([]);
+  const [paidTransactions, setPaidTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
+  const [periodType, setPeriodType] = useState<PeriodType>('month');
+  const [dateRange, setDateRange] = useState({ start: new Date(), end: new Date() });
+  const [walletsExpanded, setWalletsExpanded] = useState(false);
+  const [upcomingExpanded, setUpcomingExpanded] = useState(false);
+  const [paidExpanded, setPaidExpanded] = useState(false);
+
+  // Calcula o intervalo de datas baseado no tipo de período
+  const calculateDateRange = (type: PeriodType) => {
+    const now = new Date();
+    let start: Date;
+    let end: Date;
+
+    switch (type) {
+      case 'week':
+        // Semana atual (domingo a sábado)
+        start = startOfWeek(now, { weekStartsOn: 0 });
+        end = endOfWeek(now, { weekStartsOn: 0 });
+        break;
+
+      case 'biweekly':
+        // Quinzena (1-15 ou 16-fim do mês)
+        const dayOfMonth = now.getDate();
+        if (dayOfMonth <= 15) {
+          start = startOfMonth(now);
+          end = new Date(now.getFullYear(), now.getMonth(), 15, 23, 59, 59);
+        } else {
+          start = new Date(now.getFullYear(), now.getMonth(), 16);
+          end = endOfMonth(now);
+        }
+        break;
+
+      case 'month':
+      default:
+        // Mês completo
+        start = startOfMonth(now);
+        end = endOfMonth(now);
+        break;
+    }
+
+    return { start, end };
+  };
+
+  // Atualiza o período quando o tipo muda
+  useEffect(() => {
+    const range = calculateDateRange(periodType);
+    setDateRange(range);
+  }, [periodType]);
 
   // Carrega dados do dashboard
   useEffect(() => {
     const loadDashboard = async () => {
+      setLoading(true);
       try {
-        const [summaryRes, upcomingRes] = await Promise.all([
-          api.get<DashboardSummary>('/dashboard/summary'),
-          api.get<Transaction[]>('/dashboard/upcoming?days=7'),
+        // Calcula quantos dias faltam até o fim do período
+        const daysUntilEnd = Math.ceil(
+          (dateRange.end.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
+        );
+
+        const [summaryRes, upcomingRes, paidRes] = await Promise.all([
+          api.get<DashboardSummary>('/dashboard/summary', {
+            params: {
+              startDate: dateRange.start.toISOString(),
+              endDate: dateRange.end.toISOString(),
+            },
+          }),
+          api.get<Transaction[]>('/dashboard/upcoming', {
+            params: {
+              days: Math.max(daysUntilEnd, 7), // Mínimo 7 dias
+            },
+          }),
+          api.get<Transaction[]>('/transactions', {
+            params: {
+              startDate: dateRange.start.toISOString(),
+              endDate: dateRange.end.toISOString(),
+              isPaid: true,
+            },
+          }),
         ]);
 
         setSummary(summaryRes.data);
         setUpcoming(upcomingRes.data);
+        setPaidTransactions(paidRes.data);
       } catch (error) {
         console.error('Erro ao carregar dashboard:', error);
       } finally {
@@ -42,7 +131,7 @@ export default function Dashboard() {
     };
 
     loadDashboard();
-  }, []);
+  }, [dateRange]);
 
   if (loading) {
     return (
@@ -57,13 +146,59 @@ export default function Dashboard() {
   return (
     <Layout>
       <div className="space-y-6">
-        {/* Cabeçalho */}
-        <div>
-          <h1 className="text-3xl font-bold">Dashboard</h1>
-          <p className="text-default-500 mt-1">
-            Visão geral das suas finanças
-          </p>
+        {/* Cabeçalho com Filtro de Período */}
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold">Dashboard</h1>
+            <p className="text-default-500 mt-1">
+              Visão geral das suas finanças
+            </p>
+          </div>
+
+          {/* Filtro de Período */}
+          <div className="flex items-center gap-3">
+            <Filter className="text-default-400" size={20} />
+            <Select
+              label="Período"
+              placeholder="Selecione o período"
+              selectedKeys={[periodType]}
+              onChange={(e) => setPeriodType(e.target.value as PeriodType)}
+              className="w-48"
+              size="sm"
+            >
+              <SelectItem key="week" value="week">
+                Semana Atual
+              </SelectItem>
+              <SelectItem key="biweekly" value="biweekly">
+                Quinzena Atual
+              </SelectItem>
+              <SelectItem key="month" value="month">
+                Mês Atual
+              </SelectItem>
+            </Select>
+          </div>
         </div>
+
+        {/* Indicador do Período Selecionado */}
+        <Card className="bg-primary-50 dark:bg-primary-900/20 border-l-4 border-primary">
+          <CardBody>
+            <div className="flex items-center gap-3">
+              <Calendar className="text-primary" size={20} />
+              <div>
+                <p className="font-semibold text-primary">
+                  {periodType === 'week' && 'Semana: '}
+                  {periodType === 'biweekly' && 'Quinzena: '}
+                  {periodType === 'month' && 'Mês: '}
+                  {format(dateRange.start, 'dd/MM/yyyy', { locale: ptBR })} até{' '}
+                  {format(dateRange.end, 'dd/MM/yyyy', { locale: ptBR })}
+                </p>
+                <p className="text-small text-default-500">
+                  Dados atualizados em tempo real
+                </p>
+              </div>
+            </div>
+          </CardBody>
+        </Card>
 
         {/* Cards de Resumo */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -127,11 +262,11 @@ export default function Dashboard() {
             </CardBody>
           </Card>
 
-          {/* Balanço do Mês */}
+          {/* Balanço do Período */}
           <Card>
             <CardBody className="gap-2">
               <div className="flex items-center justify-between">
-                <p className="text-small text-default-500">Balanço</p>
+                <p className="text-small text-default-500">Balanço do Período</p>
                 <Calendar className="text-default-400" size={20} />
               </div>
               <p className={`text-2xl font-bold ${
@@ -143,8 +278,13 @@ export default function Dashboard() {
                 }).format(summary?.balance || 0)}
               </p>
               <p className="text-tiny text-default-400">
-                Período: {summary?.period.month}/{summary?.period.year}
+                Balanço considerando receitas e despesas pagas
               </p>
+              {/* <p className="text-tiny text-default-500 mt-1">
+                {(summary?.balance || 0) >= 0 
+                  ? '✓ Você ganhou mais do que gastou' 
+                  : '⚠ Você gastou mais do que ganhou'}
+              </p> */}
             </CardBody>
           </Card>
         </div>
@@ -170,96 +310,216 @@ export default function Dashboard() {
 
         {/* Carteiras */}
         <Card>
-          <CardHeader>
+          <CardHeader className="flex justify-between items-center cursor-pointer hover:bg-default-100 transition-colors"
+            onClick={() => setWalletsExpanded(!walletsExpanded)}
+          >
             <h2 className="text-xl font-semibold">Minhas Carteiras</h2>
+            <button
+              className="p-2 rounded-lg hover:bg-default-200 transition-colors"
+              onClick={(e) => {
+                e.stopPropagation();
+                setWalletsExpanded(!walletsExpanded);
+              }}
+              aria-label={walletsExpanded ? 'Minimizar' : 'Expandir'}
+            >
+              {walletsExpanded ? (
+                <ChevronUp className="text-default-500" size={20} />
+              ) : (
+                <ChevronDown className="text-default-500" size={20} />
+              )}
+            </button>
           </CardHeader>
-          <CardBody>
-            {summary?.wallets && summary.wallets.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {summary.wallets.map((wallet) => (
-                  <Card key={wallet.id} shadow="sm">
-                    <CardBody>
-                      <div className="flex items-center gap-3">
-                        <div
-                          className="w-10 h-10 rounded-lg flex items-center justify-center text-xl"
-                          style={{ backgroundColor: wallet.color + '20' }}
-                        >
-                          {wallet.icon === 'wallet' ? '💼' : '💳'}
+          {walletsExpanded && (
+            <CardBody>
+              {summary?.wallets && summary.wallets.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {summary.wallets.map((wallet) => (
+                    <Card key={wallet.id} shadow="sm">
+                      <CardBody>
+                        <div className="flex items-center gap-3">
+                          <div
+                            className="w-10 h-10 rounded-lg flex items-center justify-center text-xl"
+                            style={{ backgroundColor: wallet.color + '20' }}
+                          >
+                            {wallet.icon === 'wallet' ? '💼' : '💳'}
+                          </div>
+                          <div className="flex-1">
+                            <p className="font-medium">{wallet.name}</p>
+                            <p className="text-xl font-bold">
+                              {new Intl.NumberFormat('pt-BR', {
+                                style: 'currency',
+                                currency: 'BRL',
+                              }).format(wallet.balance)}
+                            </p>
+                          </div>
                         </div>
-                        <div className="flex-1">
-                          <p className="font-medium">{wallet.name}</p>
-                          <p className="text-xl font-bold">
-                            {new Intl.NumberFormat('pt-BR', {
-                              style: 'currency',
-                              currency: 'BRL',
-                            }).format(wallet.balance)}
-                          </p>
-                        </div>
-                      </div>
-                    </CardBody>
-                  </Card>
-                ))}
-              </div>
-            ) : (
-              <p className="text-center text-default-500 py-4">
-                Nenhuma carteira cadastrada
-              </p>
-            )}
-          </CardBody>
+                      </CardBody>
+                    </Card>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-center text-default-500 py-4">
+                  Nenhuma carteira cadastrada
+                </p>
+              )}
+            </CardBody>
+          )}
         </Card>
 
         {/* Próximos Vencimentos */}
         <Card>
-          <CardHeader>
-            <h2 className="text-xl font-semibold">Próximos Vencimentos (7 dias)</h2>
+          <CardHeader className="flex justify-between items-center cursor-pointer hover:bg-default-100 transition-colors"
+            onClick={() => setUpcomingExpanded(!upcomingExpanded)}
+          >
+            <h2 className="text-xl font-semibold">
+              Próximos Vencimentos ({
+                periodType === 'week' ? 'esta semana' :
+                periodType === 'biweekly' ? 'nesta quinzena' :
+                'neste mês'
+              })
+            </h2>
+            <button
+              className="p-2 rounded-lg hover:bg-default-200 transition-colors"
+              onClick={(e) => {
+                e.stopPropagation();
+                setUpcomingExpanded(!upcomingExpanded);
+              }}
+              aria-label={upcomingExpanded ? 'Minimizar' : 'Expandir'}
+            >
+              {upcomingExpanded ? (
+                <ChevronUp className="text-default-500" size={20} />
+              ) : (
+                <ChevronDown className="text-default-500" size={20} />
+              )}
+            </button>
           </CardHeader>
-          <CardBody>
-            {upcoming.length > 0 ? (
-              <div className="space-y-3">
-                {upcoming.map((transaction) => (
-                  <div
-                    key={transaction.id}
-                    className="flex items-center justify-between p-3 rounded-lg bg-default-100 dark:bg-default-50"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div
-                        className="w-10 h-10 rounded-lg flex items-center justify-center"
-                        style={{ backgroundColor: transaction.category.color + '20' }}
-                      >
-                        {transaction.type === 'INCOME' ? '📈' : '📉'}
+          {upcomingExpanded && (
+            <CardBody>
+              {upcoming.length > 0 ? (
+                <div className="space-y-3">
+                  {upcoming.map((transaction) => (
+                    <div
+                      key={transaction.id}
+                      className="flex items-center justify-between p-3 rounded-lg bg-default-100 dark:bg-default-50"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div
+                          className="w-10 h-10 rounded-lg flex items-center justify-center"
+                          style={{ backgroundColor: transaction.category.color + '20' }}
+                        >
+                          {transaction.type === 'INCOME' ? '📈' : '📉'}
+                        </div>
+                        <div>
+                          <p className="font-medium">{transaction.description}</p>
+                          <p className="text-small text-default-500">
+                            {transaction.category.name} • {transaction.wallet.name}
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-medium">{transaction.description}</p>
+                      <div className="text-right">
+                        <p className={`font-semibold ${
+                          transaction.type === 'INCOME' ? 'text-success' : 'text-danger'
+                        }`}>
+                          {transaction.type === 'INCOME' ? '+' : '-'}{' '}
+                          {new Intl.NumberFormat('pt-BR', {
+                            style: 'currency',
+                            currency: 'BRL',
+                          }).format(transaction.amount)}
+                        </p>
                         <p className="text-small text-default-500">
-                          {transaction.category.name} • {transaction.wallet.name}
+                          {format(new Date(transaction.dueDate), 'dd/MM/yyyy', {
+                            locale: ptBR,
+                          })}
                         </p>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <p className={`font-semibold ${
-                        transaction.type === 'INCOME' ? 'text-success' : 'text-danger'
-                      }`}>
-                        {transaction.type === 'INCOME' ? '+' : '-'}{' '}
-                        {new Intl.NumberFormat('pt-BR', {
-                          style: 'currency',
-                          currency: 'BRL',
-                        }).format(transaction.amount)}
-                      </p>
-                      <p className="text-small text-default-500">
-                        {format(new Date(transaction.dueDate), 'dd/MM/yyyy', {
-                          locale: ptBR,
-                        })}
-                      </p>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-center text-default-500 py-4">
+                  Nenhum lançamento próximo do vencimento
+                </p>
+              )}
+            </CardBody>
+          )}
+        </Card>
+
+        {/* Movimentos Pagos */}
+        <Card>
+          <CardHeader className="flex justify-between items-center cursor-pointer hover:bg-default-100 transition-colors"
+            onClick={() => setPaidExpanded(!paidExpanded)}
+          >
+            <h2 className="text-xl font-semibold">
+              Movimentos Pagos ({
+                periodType === 'week' ? 'esta semana' :
+                periodType === 'biweekly' ? 'nesta quinzena' :
+                'neste mês'
+              })
+            </h2>
+            <button
+              className="p-2 rounded-lg hover:bg-default-200 transition-colors"
+              onClick={(e) => {
+                e.stopPropagation();
+                setPaidExpanded(!paidExpanded);
+              }}
+              aria-label={paidExpanded ? 'Minimizar' : 'Expandir'}
+            >
+              {paidExpanded ? (
+                <ChevronUp className="text-default-500" size={20} />
+              ) : (
+                <ChevronDown className="text-default-500" size={20} />
+              )}
+            </button>
+          </CardHeader>
+          {paidExpanded && (
+            <CardBody>
+              {paidTransactions.length > 0 ? (
+                <div className="space-y-3">
+                  {paidTransactions.map((transaction) => (
+                    <div
+                      key={transaction.id}
+                      className="flex items-center justify-between p-3 rounded-lg bg-default-100 dark:bg-default-50"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div
+                          className="w-10 h-10 rounded-lg flex items-center justify-center"
+                          style={{ backgroundColor: transaction.category.color + '20' }}
+                        >
+                          {transaction.type === 'INCOME' ? '✅' : '💸'}
+                        </div>
+                        <div>
+                          <p className="font-medium">{transaction.description}</p>
+                          <p className="text-small text-default-500">
+                            {transaction.category.name} • {transaction.wallet.name}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className={`font-semibold ${
+                          transaction.type === 'INCOME' ? 'text-success' : 'text-danger'
+                        }`}>
+                          {transaction.type === 'INCOME' ? '+' : '-'}{' '}
+                          {new Intl.NumberFormat('pt-BR', {
+                            style: 'currency',
+                            currency: 'BRL',
+                          }).format(transaction.amount)}
+                        </p>
+                        <p className="text-small text-default-500">
+                          {format(new Date(transaction.paymentDate || transaction.dueDate), 'dd/MM/yyyy', {
+                            locale: ptBR,
+                          })}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-center text-default-500 py-4">
-                Nenhum lançamento nos próximos 7 dias
-              </p>
-            )}
-          </CardBody>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-center text-default-500 py-4">
+                  Nenhum movimento pago no período
+                </p>
+              )}
+            </CardBody>
+          )}
         </Card>
       </div>
     </Layout>
