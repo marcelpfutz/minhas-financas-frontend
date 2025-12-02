@@ -36,52 +36,53 @@ import { ptBR } from 'date-fns/locale';
 
 type PeriodType = 'week' | 'biweekly' | 'month';
 
+// Calcula o intervalo de datas baseado no tipo de período
+const calculateDateRange = (type: PeriodType) => {
+  const now = new Date();
+  let start: Date;
+  let end: Date;
+
+  switch (type) {
+    case 'week':
+      // Semana atual (domingo a sábado)
+      start = startOfWeek(now, { weekStartsOn: 0 });
+      end = endOfWeek(now, { weekStartsOn: 0 });
+      break;
+
+    case 'biweekly':
+      // Quinzena (1-15 ou 16-fim do mês)
+      const dayOfMonth = now.getDate();
+      if (dayOfMonth <= 15) {
+        start = startOfMonth(now);
+        end = new Date(now.getFullYear(), now.getMonth(), 15, 23, 59, 59);
+      } else {
+        start = new Date(now.getFullYear(), now.getMonth(), 16);
+        end = endOfMonth(now);
+      }
+      break;
+
+    case 'month':
+    default:
+      // Mês completo
+      start = startOfMonth(now);
+      end = endOfMonth(now);
+      break;
+  }
+
+  return { start, end };
+};
+
 export default function Dashboard() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [upcoming, setUpcoming] = useState<Transaction[]>([]);
   const [paidTransactions, setPaidTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [periodType, setPeriodType] = useState<PeriodType>('month');
-  const [dateRange, setDateRange] = useState({ start: new Date(), end: new Date() });
+  // Inicializa dateRange com o cálculo correto do período padrão
+  const [dateRange, setDateRange] = useState(() => calculateDateRange('month'));
   const [walletsExpanded, setWalletsExpanded] = useState(false);
   const [upcomingExpanded, setUpcomingExpanded] = useState(false);
   const [paidExpanded, setPaidExpanded] = useState(false);
-
-  // Calcula o intervalo de datas baseado no tipo de período
-  const calculateDateRange = (type: PeriodType) => {
-    const now = new Date();
-    let start: Date;
-    let end: Date;
-
-    switch (type) {
-      case 'week':
-        // Semana atual (domingo a sábado)
-        start = startOfWeek(now, { weekStartsOn: 0 });
-        end = endOfWeek(now, { weekStartsOn: 0 });
-        break;
-
-      case 'biweekly':
-        // Quinzena (1-15 ou 16-fim do mês)
-        const dayOfMonth = now.getDate();
-        if (dayOfMonth <= 15) {
-          start = startOfMonth(now);
-          end = new Date(now.getFullYear(), now.getMonth(), 15, 23, 59, 59);
-        } else {
-          start = new Date(now.getFullYear(), now.getMonth(), 16);
-          end = endOfMonth(now);
-        }
-        break;
-
-      case 'month':
-      default:
-        // Mês completo
-        start = startOfMonth(now);
-        end = endOfMonth(now);
-        break;
-    }
-
-    return { start, end };
-  };
 
   // Atualiza o período quando o tipo muda
   useEffect(() => {
