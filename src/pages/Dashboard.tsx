@@ -77,17 +77,26 @@ export default function Dashboard() {
   const [upcoming, setUpcoming] = useState<Transaction[]>([]);
   const [paidTransactions, setPaidTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
-  const [periodType, setPeriodType] = useState<PeriodType>('month');
-  // Inicializa dateRange com o cálculo correto do período padrão
-  const [dateRange, setDateRange] = useState(() => calculateDateRange('month'));
+  // Carrega o tipo de período salvo no localStorage ou usa 'month' como padrão
+  const [periodType, setPeriodType] = useState<PeriodType>(() => {
+    const saved = localStorage.getItem('dashboard-period-type');
+    return (saved as PeriodType) || 'month';
+  });
+  // Inicializa dateRange com o cálculo correto do período salvo
+  const [dateRange, setDateRange] = useState(() => {
+    const saved = localStorage.getItem('dashboard-period-type');
+    return calculateDateRange((saved as PeriodType) || 'month');
+  });
   const [walletsExpanded, setWalletsExpanded] = useState(false);
   const [upcomingExpanded, setUpcomingExpanded] = useState(false);
   const [paidExpanded, setPaidExpanded] = useState(false);
 
-  // Atualiza o período quando o tipo muda
+  // Atualiza o período quando o tipo muda e salva no localStorage
   useEffect(() => {
     const range = calculateDateRange(periodType);
     setDateRange(range);
+    // Salva a preferência do usuário
+    localStorage.setItem('dashboard-period-type', periodType);
   }, [periodType]);
 
   // Carrega dados do dashboard
