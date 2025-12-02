@@ -35,7 +35,6 @@ export default function Transactions() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
-  const [deleteMode, setDeleteMode] = useState<'single' | 'all' | null>(null);
   const [editMode, setEditMode] = useState<'single' | 'all' | null>(null);
   
   const [formData, setFormData] = useState<CreateTransactionData>({
@@ -183,7 +182,6 @@ export default function Transactions() {
       await loadData();
       onDeleteClose();
       setTransactionToDelete(null);
-      setDeleteMode(null);
     } catch (error: any) {
       alert(error.response?.data?.error || 'Erro ao deletar lançamento');
     }
