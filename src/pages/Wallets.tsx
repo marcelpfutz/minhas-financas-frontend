@@ -20,15 +20,19 @@ import {
   Spinner,
   Chip,
 } from '@nextui-org/react';
-import { Wallet as WalletIcon, Plus, Edit, Trash2 } from 'lucide-react';
+import { Wallet as WalletIcon, Plus, Edit, Trash2, Power } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import api from '../lib/api';
-import { Wallet, CreateWalletData } from '../types';
+import { Wallet, CreateWalletData, Transaction } from '../types';
+import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
 export default function Wallets() {
   const [wallets, setWallets] = useState<Wallet[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedWallet, setSelectedWallet] = useState<Wallet | null>(null);
+  const [walletTransactions, setWalletTransactions] = useState<Transaction[]>([]);
+  const [loadingTransactions, setLoadingTransactions] = useState(false);
   const [formData, setFormData] = useState<CreateWalletData>({
     name: '',
     description: '',
@@ -38,16 +42,34 @@ export default function Wallets() {
   });
   
   const { isOpen, onOpen, onClose } = useDisclosure();
+  const { 
+    isOpen: isTransactionsOpen, 
+    onOpen: onTransactionsOpen, 
+    onClose: onTransactionsClose 
+  } = useDisclosure();
+  const { 
+    isOpen: isConfirmOpen, 
+    onOpen: onConfirmOpen, 
+    onClose: onConfirmClose 
+  } = useDisclosure();
   const [submitting, setSubmitting] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<{
+    type: 'toggle' | 'delete';
+    wallet?: Wallet;
+    message: string;
+    onConfirm: () => Promise<void>;
+  } | null>(null);
 
-  // Carrega carteiras
   useEffect(() => {
     loadWallets();
   }, []);
 
   const loadWallets = async () => {
     try {
-      const response = await api.get<Wallet[]>('/wallets');
+      // Inclui carteiras inativas na tela de gerenciamento
+      const response = await api.get<Wallet[]>('/wallets', {
+        params: { includeInactive: 'true' }
+      });
       setWallets(response.data);
     } catch (error) {
       console.error('Erro ao carregar carteiras:', error);
@@ -56,7 +78,6 @@ export default function Wallets() {
     }
   };
 
-  // Abre modal para criar
   const handleCreate = () => {
     setSelectedWallet(null);
     setFormData({
@@ -69,7 +90,6 @@ export default function Wallets() {
     onOpen();
   };
 
-  // Abre modal para editar
   const handleEdit = (wallet: Wallet) => {
     setSelectedWallet(wallet);
     setFormData({
@@ -82,12 +102,10 @@ export default function Wallets() {
     onOpen();
   };
 
-  // Salva (criar ou editar)
   const handleSave = async () => {
     setSubmitting(true);
     try {
       if (selectedWallet) {
-        // Editar
         await api.put(`/wallets/${selectedWallet.id}`, {
           name: formData.name,
           description: formData.description,
@@ -95,7 +113,6 @@ export default function Wallets() {
           icon: formData.icon,
         });
       } else {
-        // Criar
         await api.post('/wallets', formData);
       }
       await loadWallets();
@@ -107,15 +124,67 @@ export default function Wallets() {
     }
   };
 
-  // Deleta carteira
   const handleDelete = async (id: string) => {
-    if (!confirm('Tem certeza que deseja excluir esta carteira?')) return;
+    const wallet = wallets.find(w => w.id === id);
+    if (!wallet) return;
+
+    setConfirmAction({
+      type: 'delete',
+      wallet,
+      message: wallet.balance !== 0 
+        ? `Não é possível excluir a carteira "${wallet.name}" pois ela possui saldo de ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(wallet.balance)}. Transfira ou ajuste o saldo para R$ 0,00 primeiro.`
+        : `Tem certeza que deseja excluir a carteira "${wallet.name}"? Esta ação não poderá ser desfeita.`,
+      onConfirm: async () => {
+        try {
+          await api.delete(`/wallets/${id}`);
+          await loadWallets();
+          onConfirmClose();
+        } catch (error: any) {
+          alert(error.response?.data?.error || 'Erro ao deletar carteira');
+        }
+      },
+    });
+    onConfirmOpen();
+  };
+
+  const handleToggleActive = async (wallet: Wallet) => {
+    const newStatus = !wallet.isActive;
+    const action = newStatus ? 'ativar' : 'desativar';
+    
+    setConfirmAction({
+      type: 'toggle',
+      wallet,
+      message: `Tem certeza que deseja ${action} a carteira "${wallet.name}"?${
+        !newStatus ? ' Carteiras inativas não aparecem no dashboard e não podem receber novos lançamentos.' : ''
+      }`,
+      onConfirm: async () => {
+        try {
+          await api.put(`/wallets/${wallet.id}`, {
+            isActive: newStatus,
+          });
+          await loadWallets();
+          onConfirmClose();
+        } catch (error: any) {
+          alert(error.response?.data?.error || `Erro ao ${action} carteira`);
+        }
+      },
+    });
+    onConfirmOpen();
+  };
+
+  const handleViewTransactions = async (wallet: Wallet) => {
+    setSelectedWallet(wallet);
+    setLoadingTransactions(true);
+    onTransactionsOpen();
 
     try {
-      await api.delete(`/wallets/${id}`);
-      await loadWallets();
-    } catch (error: any) {
-      alert(error.response?.data?.error || 'Erro ao deletar carteira');
+      const response = await api.get<Transaction[]>(`/wallets/${wallet.id}/transactions`);
+      setWalletTransactions(response.data);
+    } catch (error) {
+      console.error('Erro ao carregar transações:', error);
+      alert('Erro ao carregar transações da carteira');
+    } finally {
+      setLoadingTransactions(false);
     }
   };
 
@@ -132,7 +201,6 @@ export default function Wallets() {
   return (
     <Layout>
       <div className="space-y-6">
-        {/* Cabeçalho */}
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold">Carteiras</h1>
@@ -149,11 +217,15 @@ export default function Wallets() {
           </Button>
         </div>
 
-        {/* Lista de Carteiras */}
         {wallets.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {wallets.map((wallet) => (
-              <Card key={wallet.id}>
+              <Card 
+                key={wallet.id} 
+                isPressable
+                onPress={() => handleViewTransactions(wallet)}
+                className="hover:scale-[1.02] transition-transform"
+              >
                 <CardHeader className="flex gap-3">
                   <div
                     className="w-12 h-12 rounded-lg flex items-center justify-center text-2xl"
@@ -169,11 +241,13 @@ export default function Wallets() {
                       </p>
                     )}
                   </div>
-                  {wallet.isActive && (
-                    <Chip size="sm" color="success" variant="flat">
-                      Ativa
-                    </Chip>
-                  )}
+                  <Chip 
+                    size="sm" 
+                    color={wallet.isActive ? "success" : "default"} 
+                    variant="flat"
+                  >
+                    {wallet.isActive ? 'Ativa' : 'Inativa'}
+                  </Chip>
                 </CardHeader>
                 <CardBody>
                   <div className="space-y-3">
@@ -191,18 +265,38 @@ export default function Wallets() {
                         size="sm"
                         variant="flat"
                         startContent={<Edit size={16} />}
-                        onPress={() => handleEdit(wallet)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleEdit(wallet);
+                        }}
                         className="flex-1"
                       >
                         Editar
                       </Button>
                       <Button
                         size="sm"
+                        color={wallet.isActive ? "default" : "success"}
+                        variant="flat"
+                        startContent={<Power size={16} />}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleToggleActive(wallet);
+                        }}
+                        className="flex-1"
+                      >
+                        {wallet.isActive ? 'Desativar' : 'Ativar'}
+                      </Button>
+                      <Button
+                        size="sm"
                         color="danger"
                         variant="flat"
                         startContent={<Trash2 size={16} />}
-                        onPress={() => handleDelete(wallet.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(wallet.id);
+                        }}
                         className="flex-1"
+                        isDisabled={wallet.balance !== 0}
                       >
                         Excluir
                       </Button>
@@ -224,7 +318,6 @@ export default function Wallets() {
           </Card>
         )}
 
-        {/* Modal de Criar/Editar */}
         <Modal isOpen={isOpen} onClose={onClose} size="2xl">
           <ModalContent>
             <ModalHeader>
@@ -306,6 +399,139 @@ export default function Wallets() {
               >
                 {selectedWallet ? 'Salvar' : 'Criar'}
               </Button>
+            </ModalFooter>
+          </ModalContent>
+        </Modal>
+
+        <Modal isOpen={isTransactionsOpen} onClose={onTransactionsClose} size="3xl" scrollBehavior="inside">
+          <ModalContent>
+            <ModalHeader>
+              <div className="flex items-center gap-3">
+                <div
+                  className="w-10 h-10 rounded-lg flex items-center justify-center text-xl"
+                  style={{ backgroundColor: selectedWallet?.color + '20' }}
+                >
+                  {selectedWallet?.icon === 'wallet' ? '💼' : '💳'}
+                </div>
+                <div>
+                  <p className="text-lg font-semibold">{selectedWallet?.name}</p>
+                  <p className="text-sm text-default-500 font-normal">
+                    Últimas movimentações (15 dias)
+                  </p>
+                </div>
+              </div>
+            </ModalHeader>
+            <ModalBody>
+              {loadingTransactions ? (
+                <div className="flex items-center justify-center py-12">
+                  <Spinner size="lg" />
+                </div>
+              ) : walletTransactions.length > 0 ? (
+                <div className="space-y-3">
+                  {walletTransactions.map((transaction) => (
+                    <Card key={transaction.id} shadow="sm">
+                      <CardBody>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div
+                              className="w-10 h-10 rounded-lg flex items-center justify-center"
+                              style={{ backgroundColor: transaction.category.color + '20' }}
+                            >
+                              {transaction.type === 'INCOME' ? '📈' : '📉'}
+                            </div>
+                            <div>
+                              <p className="font-medium">{transaction.description}</p>
+                              <p className="text-small text-default-500">
+                                {transaction.category.name}
+                                {transaction.isPaid && (
+                                  <Chip size="sm" color="success" variant="flat" className="ml-2">
+                                    Pago
+                                  </Chip>
+                                )}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className={`text-lg font-bold ${
+                              transaction.type === 'INCOME' ? 'text-success' : 'text-danger'
+                            }`}>
+                              {transaction.type === 'INCOME' ? '+' : '-'}{' '}
+                              {new Intl.NumberFormat('pt-BR', {
+                                style: 'currency',
+                                currency: 'BRL',
+                              }).format(transaction.amount)}
+                            </p>
+                            <p className="text-small text-default-400">
+                              {format(new Date(transaction.dueDate), 'dd/MM/yyyy', {
+                                locale: ptBR,
+                              })}
+                            </p>
+                          </div>
+                        </div>
+                      </CardBody>
+                    </Card>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <p className="text-default-500">Nenhuma movimentação nos últimos 15 dias</p>
+                </div>
+              )}
+            </ModalBody>
+            <ModalFooter>
+              <Button variant="light" onPress={onTransactionsClose}>
+                Fechar
+              </Button>
+            </ModalFooter>
+          </ModalContent>
+        </Modal>
+
+        {/* Modal de Confirmação */}
+        <Modal isOpen={isConfirmOpen} onClose={onConfirmClose}>
+          <ModalContent>
+            <ModalHeader>
+              {confirmAction?.type === 'delete' ? 'Excluir Carteira' : 
+               confirmAction?.wallet?.isActive ? 'Desativar Carteira' : 'Ativar Carteira'}
+            </ModalHeader>
+            <ModalBody>
+              <p className="text-default-700">{confirmAction?.message}</p>
+              {confirmAction?.wallet && (
+                <Card className="mt-4" shadow="sm">
+                  <CardBody>
+                    <div className="flex items-center gap-3">
+                      <div
+                        className="w-10 h-10 rounded-lg flex items-center justify-center text-xl"
+                        style={{ backgroundColor: confirmAction.wallet.color + '20' }}
+                      >
+                        {confirmAction.wallet.icon === 'wallet' ? '💼' : '💳'}
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-semibold">{confirmAction.wallet.name}</p>
+                        <p className="text-small text-default-500">
+                          Saldo: {new Intl.NumberFormat('pt-BR', {
+                            style: 'currency',
+                            currency: 'BRL',
+                          }).format(confirmAction.wallet.balance)}
+                        </p>
+                      </div>
+                    </div>
+                  </CardBody>
+                </Card>
+              )}
+            </ModalBody>
+            <ModalFooter>
+              <Button variant="light" onPress={onConfirmClose}>
+                Cancelar
+              </Button>
+              {confirmAction?.wallet?.balance === 0 || confirmAction?.type === 'toggle' ? (
+                <Button
+                  color={confirmAction?.type === 'delete' ? 'danger' : 'primary'}
+                  onPress={() => confirmAction?.onConfirm()}
+                >
+                  {confirmAction?.type === 'delete' ? 'Excluir' :
+                   confirmAction?.wallet?.isActive ? 'Desativar' : 'Ativar'}
+                </Button>
+              ) : null}
             </ModalFooter>
           </ModalContent>
         </Modal>
