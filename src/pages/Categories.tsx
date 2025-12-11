@@ -21,9 +21,8 @@ import {
   Spinner,
   Tabs,
   Tab,
-  Chip,
 } from '@nextui-org/react';
-import { Tag, Plus, Edit, Trash2, TrendingUp, TrendingDown } from 'lucide-react';
+import { Tag, Plus, Edit, Trash2, TrendingUp, TrendingDown, Search } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import api from '../lib/api';
 import { Category, CreateCategoryData } from '../types';
@@ -33,6 +32,7 @@ export default function Categories() {
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [selectedTab, setSelectedTab] = useState<'INCOME' | 'EXPENSE'>('EXPENSE');
+  const [searchTerm, setSearchTerm] = useState('');
   const [formData, setFormData] = useState<CreateCategoryData>({
     name: '',
     description: '',
@@ -116,8 +116,19 @@ export default function Categories() {
     }
   };
 
-  const incomeCategories = categories.filter((c) => c.type === 'INCOME');
-  const expenseCategories = categories.filter((c) => c.type === 'EXPENSE');
+  // Filtrar categorias por tipo e busca
+  const filterCategories = (type: 'INCOME' | 'EXPENSE') => {
+    return categories.filter((c) => {
+      const matchesType = c.type === type;
+      const matchesSearch = searchTerm === '' || 
+        c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (c.description?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false);
+      return matchesType && matchesSearch;
+    });
+  };
+
+  const incomeCategories = filterCategories('INCOME');
+  const expenseCategories = filterCategories('EXPENSE');
 
   if (loading) {
     return (
@@ -154,14 +165,9 @@ export default function Categories() {
                   {category.type === 'INCOME' ? '📈' : '📉'}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="text-md font-semibold truncate">
-                      {category.name}
-                    </p>
-                    {category.isActive && (
-                      <Chip size="sm" color="success" variant="dot" />
-                    )}
-                  </div>
+                  <p className="text-md font-semibold truncate">
+                    {category.name}
+                  </p>
                   {category.description && (
                     <p className="text-small text-default-500 mt-1 line-clamp-2">
                       {category.description}
@@ -207,6 +213,16 @@ export default function Categories() {
             </p>
           </div>
         </div>
+
+        <Input
+          placeholder="Buscar categorias..."
+          value={searchTerm}
+          onValueChange={setSearchTerm}
+          startContent={<Search size={18} className="text-default-400" />}
+          isClearable
+          onClear={() => setSearchTerm('')}
+          className="max-w-md"
+        />
 
         <Tabs
           selectedKey={selectedTab}
