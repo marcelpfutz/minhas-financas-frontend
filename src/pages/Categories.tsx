@@ -21,7 +21,6 @@ import {
   Spinner,
   Tabs,
   Tab,
-  Chip,
 } from '@nextui-org/react';
 import { Tag, Plus, Edit, Trash2, TrendingUp, TrendingDown } from 'lucide-react';
 import { Layout } from '../components/Layout';
@@ -154,14 +153,9 @@ export default function Categories() {
                   {category.type === 'INCOME' ? '📈' : '📉'}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="text-md font-semibold truncate">
-                      {category.name}
-                    </p>
-                    {category.isActive && (
-                      <Chip size="sm" color="success" variant="dot" />
-                    )}
-                  </div>
+                  <p className="text-md font-semibold truncate">
+                    {category.name}
+                  </p>
                   {category.description && (
                     <p className="text-small text-default-500 mt-1 line-clamp-2">
                       {category.description}
