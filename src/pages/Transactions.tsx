@@ -26,8 +26,6 @@ import { Plus, Edit, Trash2, Check, Calendar } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import api from '../lib/api';
 import { Transaction, CreateTransactionData, Wallet, Category } from '../types';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
 
 export default function Transactions() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -272,9 +270,7 @@ export default function Transactions() {
                         <span>•</span>
                         <span className="flex items-center gap-1">
                           <Calendar size={14} />
-                          {format(new Date(transaction.dueDate), 'dd/MM/yyyy', {
-                            locale: ptBR,
-                          })}
+                          {transaction.dueDate.split('T')[0].split('-').reverse().join('/')}
                         </span>
                       </div>
                     </div>
