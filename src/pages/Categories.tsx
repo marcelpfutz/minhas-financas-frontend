@@ -42,7 +42,24 @@ export default function Categories() {
   });
 
   const { isOpen, onOpen, onClose } = useDisclosure();
+  const {
+    isOpen: isAlertOpen,
+    onOpen: onAlertOpen,
+    onClose: onAlertClose
+  } = useDisclosure();
+  const {
+    isOpen: isDeleteOpen,
+    onOpen: onDeleteOpen,
+    onClose: onDeleteClose
+  } = useDisclosure();
   const [submitting, setSubmitting] = useState(false);
+  const [alertMessage, setAlertMessage] = useState({ title: '', message: '', type: 'error' as 'error' | 'success' });
+  const [categoryToDelete, setCategoryToDelete] = useState<string | null>(null);
+
+  const showAlert = (title: string, message: string, type: 'error' | 'success' = 'error') => {
+    setAlertMessage({ title, message, type });
+    onAlertOpen();
+  };
 
   useEffect(() => {
     loadCategories();
@@ -99,20 +116,27 @@ export default function Categories() {
       await loadCategories();
       onClose();
     } catch (error: any) {
-      alert(error.response?.data?.error || 'Erro ao salvar categoria');
+      showAlert('Erro ao Salvar', error.response?.data?.error || 'Erro ao salvar categoria');
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Tem certeza que deseja excluir esta categoria?')) return;
+    setCategoryToDelete(id);
+    onDeleteOpen();
+  };
+
+  const confirmDelete = async () => {
+    if (!categoryToDelete) return;
 
     try {
-      await api.delete(`/categories/${id}`);
+      await api.delete(`/categories/${categoryToDelete}`);
       await loadCategories();
+      onDeleteClose();
+      setCategoryToDelete(null);
     } catch (error: any) {
-      alert(error.response?.data?.error || 'Erro ao deletar categoria');
+      showAlert('Erro ao Deletar', error.response?.data?.error || 'Erro ao deletar categoria');
     }
   };
 
@@ -361,6 +385,43 @@ export default function Categories() {
                 isLoading={submitting}
               >
                 {selectedCategory ? 'Salvar' : 'Criar'}
+              </Button>
+            </ModalFooter>
+          </ModalContent>
+        </Modal>
+
+        {/* Modal de Confirmação de Exclusão */}
+        <Modal isOpen={isDeleteOpen} onClose={onDeleteClose}>
+          <ModalContent>
+            <ModalHeader>Excluir Categoria</ModalHeader>
+            <ModalBody>
+              <p className="text-default-700">
+                Tem certeza que deseja excluir esta categoria? Esta ação não pode ser desfeita.
+              </p>
+            </ModalBody>
+            <ModalFooter>
+              <Button variant="light" onPress={onDeleteClose}>
+                Cancelar
+              </Button>
+              <Button color="danger" onPress={confirmDelete}>
+                Excluir
+              </Button>
+            </ModalFooter>
+          </ModalContent>
+        </Modal>
+
+        {/* Modal de Alerta */}
+        <Modal isOpen={isAlertOpen} onClose={onAlertClose}>
+          <ModalContent>
+            <ModalHeader className={alertMessage.type === 'error' ? 'text-danger' : 'text-success'}>
+              {alertMessage.title}
+            </ModalHeader>
+            <ModalBody>
+              <p className="text-default-700">{alertMessage.message}</p>
+            </ModalBody>
+            <ModalFooter>
+              <Button color={alertMessage.type === 'error' ? 'danger' : 'primary'} onPress={onAlertClose}>
+                Ok
               </Button>
             </ModalFooter>
           </ModalContent>

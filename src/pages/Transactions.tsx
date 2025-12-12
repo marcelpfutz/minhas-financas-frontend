@@ -90,8 +90,19 @@ export default function Transactions() {
     onOpen: onEditConfirmOpen, 
     onClose: onEditConfirmClose 
   } = useDisclosure();
+  const {
+    isOpen: isAlertOpen,
+    onOpen: onAlertOpen,
+    onClose: onAlertClose
+  } = useDisclosure();
   const [submitting, setSubmitting] = useState(false);
   const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
+  const [alertMessage, setAlertMessage] = useState({ title: '', message: '', type: 'error' as 'error' | 'success' });
+
+  const showAlert = (title: string, message: string, type: 'error' | 'success' = 'error') => {
+    setAlertMessage({ title, message, type });
+    onAlertOpen();
+  };
 
   useEffect(() => {
     loadData();
@@ -182,7 +193,7 @@ export default function Transactions() {
       onClose();
       setEditMode(null);
     } catch (error: any) {
-      alert(error.response?.data?.error || 'Erro ao salvar lançamento');
+      showAlert('Erro ao Salvar', error.response?.data?.error || 'Erro ao salvar lançamento');
     } finally {
       setSubmitting(false);
     }
@@ -210,7 +221,7 @@ export default function Transactions() {
       onDeleteClose();
       setTransactionToDelete(null);
     } catch (error: any) {
-      alert(error.response?.data?.error || 'Erro ao deletar lançamento');
+      showAlert('Erro ao Deletar', error.response?.data?.error || 'Erro ao deletar lançamento');
     }
   };
 
@@ -221,7 +232,7 @@ export default function Transactions() {
       });
       await loadData();
     } catch (error: any) {
-      alert(error.response?.data?.error || 'Erro ao marcar como pago');
+      showAlert('Erro ao Marcar como Pago', error.response?.data?.error || 'Erro ao marcar como pago');
     }
   };
 
@@ -755,6 +766,23 @@ export default function Transactions() {
                 }}
               >
                 Todos do grupo
+              </Button>
+            </ModalFooter>
+          </ModalContent>
+        </Modal>
+
+        {/* Modal de Alerta */}
+        <Modal isOpen={isAlertOpen} onClose={onAlertClose}>
+          <ModalContent>
+            <ModalHeader className={alertMessage.type === 'error' ? 'text-danger' : 'text-success'}>
+              {alertMessage.title}
+            </ModalHeader>
+            <ModalBody>
+              <p className="text-default-700">{alertMessage.message}</p>
+            </ModalBody>
+            <ModalFooter>
+              <Button color={alertMessage.type === 'error' ? 'danger' : 'primary'} onPress={onAlertClose}>
+                Ok
               </Button>
             </ModalFooter>
           </ModalContent>
