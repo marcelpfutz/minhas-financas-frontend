@@ -21,8 +21,10 @@ import {
   Spinner,
   Chip,
   Checkbox,
+  Autocomplete,
+  AutocompleteItem,
 } from '@nextui-org/react';
-import { Plus, Edit, Trash2, Check, Calendar } from 'lucide-react';
+import { Plus, Edit, Trash2, Check, Calendar, Search, Filter, X } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import api from '../lib/api';
 import { Transaction, CreateTransactionData, Wallet, Category } from '../types';
@@ -34,6 +36,33 @@ export default function Transactions() {
   const [loading, setLoading] = useState(true);
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [editMode, setEditMode] = useState<'single' | 'all' | null>(null);
+  
+  // Estados dos filtros
+  const getCurrentMonthRange = () => {
+    const now = new Date();
+    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    return {
+      start: firstDay.toISOString().split('T')[0],
+      end: lastDay.toISOString().split('T')[0],
+    };
+  };
+  
+  const getDefaultFilters = () => ({
+    description: '',
+    categoryId: '',
+    categorySearch: '',
+    startDate: getCurrentMonthRange().start,
+    endDate: getCurrentMonthRange().end,
+    paymentStatus: 'all' as 'all' | 'paid' | 'pending',
+    transactionType: 'all' as 'all' | 'INCOME' | 'EXPENSE',
+  });
+  
+  const [filters, setFilters] = useState(getDefaultFilters());
+  
+  const handleClearFilters = () => {
+    setFilters(getDefaultFilters());
+  };
   
   const [formData, setFormData] = useState<CreateTransactionData>({
     description: '',
@@ -198,6 +227,43 @@ export default function Transactions() {
 
   const filteredCategories = categories.filter((c) => c.type === formData.type);
 
+  // Filtrar transações
+  const filteredTransactions = transactions.filter((transaction) => {
+    // Filtro por descrição
+    if (filters.description && !transaction.description.toLowerCase().includes(filters.description.toLowerCase())) {
+      return false;
+    }
+    
+    // Filtro por categoria
+    if (filters.categoryId && transaction.category.id !== filters.categoryId) {
+      return false;
+    }
+    
+    // Filtro por data de vencimento
+    const dueDate = transaction.dueDate.split('T')[0];
+    if (filters.startDate && dueDate < filters.startDate) {
+      return false;
+    }
+    if (filters.endDate && dueDate > filters.endDate) {
+      return false;
+    }
+    
+    // Filtro por status de pagamento
+    if (filters.paymentStatus === 'paid' && !transaction.isPaid) {
+      return false;
+    }
+    if (filters.paymentStatus === 'pending' && transaction.isPaid) {
+      return false;
+    }
+    
+    // Filtro por tipo de transação
+    if (filters.transactionType !== 'all' && transaction.type !== filters.transactionType) {
+      return false;
+    }
+    
+    return true;
+  });
+
   if (loading) {
     return (
       <Layout>
@@ -227,9 +293,90 @@ export default function Transactions() {
           </Button>
         </div>
 
-        {transactions.length > 0 ? (
+        {/* Filtros */}
+        <Card>
+          <CardBody>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Filter size={20} />
+                <h3 className="font-semibold">Filtros</h3>
+              </div>
+              <Button
+                size="sm"
+                variant="flat"
+                startContent={<X size={16} />}
+                onPress={handleClearFilters}
+              >
+                Limpar Filtros
+              </Button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <Input
+                label="Descrição"
+                placeholder="Buscar por título..."
+                value={filters.description}
+                onValueChange={(value) => setFilters({ ...filters, description: value })}
+                startContent={<Search size={18} />}
+                isClearable
+                onClear={() => setFilters({ ...filters, description: '' })}
+              />
+              
+              <Autocomplete
+                label="Categoria"
+                placeholder="Todas"
+                selectedKey={filters.categoryId}
+                onSelectionChange={(key) => setFilters({ ...filters, categoryId: key as string || '' })}
+                inputValue={filters.categorySearch}
+                onInputChange={(value) => setFilters({ ...filters, categorySearch: value })}
+                allowsCustomValue
+              >
+                {[{ id: '', name: 'Todas' }, ...categories].map((category) => (
+                  <AutocompleteItem key={category.id} value={category.id}>
+                    {category.name}
+                  </AutocompleteItem>
+                ))}
+              </Autocomplete>
+              
+              <Select
+                label="Tipo"
+                selectedKeys={[filters.transactionType]}
+                onChange={(e) => setFilters({ ...filters, transactionType: e.target.value as 'all' | 'INCOME' | 'EXPENSE' })}
+              >
+                <SelectItem key="all" value="all">Ambos</SelectItem>
+                <SelectItem key="INCOME" value="INCOME">Receitas</SelectItem>
+                <SelectItem key="EXPENSE" value="EXPENSE">Despesas</SelectItem>
+              </Select>
+              
+              <Input
+                type="date"
+                label="Data Início"
+                value={filters.startDate}
+                onChange={(e) => setFilters({ ...filters, startDate: e.target.value })}
+              />
+              
+              <Input
+                type="date"
+                label="Data Fim"
+                value={filters.endDate}
+                onChange={(e) => setFilters({ ...filters, endDate: e.target.value })}
+              />
+              
+              <Select
+                label="Status Pagamento"
+                selectedKeys={[filters.paymentStatus]}
+                onChange={(e) => setFilters({ ...filters, paymentStatus: e.target.value as 'all' | 'paid' | 'pending' })}
+              >
+                <SelectItem key="all" value="all">Todos</SelectItem>
+                <SelectItem key="paid" value="paid">Pagos</SelectItem>
+                <SelectItem key="pending" value="pending">Pendentes</SelectItem>
+              </Select>
+            </div>
+          </CardBody>
+        </Card>
+
+        {filteredTransactions.length > 0 ? (
           <div className="space-y-3">
-            {transactions.map((transaction) => (
+            {filteredTransactions.map((transaction) => (
               <Card key={transaction.id}>
                 <CardBody>
                   <div className="flex items-center gap-4">
